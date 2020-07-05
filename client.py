@@ -1,66 +1,44 @@
 import socket
-import select
-import errno
+import threading
 
-HEADER_LENGTH = 100
-
-IP = "127.0.0.1"
-PORT = 1234
-my_username = input("Username: ")
-
-
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-
-client_socket.connect((IP, PORT))
-
-
-client_socket.setblocking(False)
-
-
-username = my_username.encode('utf-8')
-username_header = f"{len(username):<{HEADER_LENGTH}}".encode('utf-8')
-client_socket.send(username_header + username)
-
+# Предлагаем ввести свой никнейм
 while True:
-
-    message = input(f'{my_username} > ')
-
-    if message:
-
-        message = message.encode('utf-8')
-        message_header = f"{len(message):<{HEADER_LENGTH}}".encode('utf-8')
-        client_socket.send(message_header + message)
-
-    try:
-        while True:
-
-            username_header = client_socket.recv(HEADER_LENGTH)
+	nickname = input("Choose your nickname: ").strip()
+	if bool(nickname) is False:
+		print("Your input must have at least 1 character.")
+		continue
+	else:
+		break
 
 
-            if not len(username_header):
-                print('Connection closed by the server')
-                sys.exit()
+# Подключаемся к серверу
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect(('127.0.0.1', 16180))
 
-            username_length = int(username_header.decode('utf-8').strip())
+# Получаем сообщения от сервера и отправляем свой ник
+def receive():
+    while True:
+        try:
+            message = client.recv(1024).decode('utf-8')
+            if message == 'CHECK@NICKNAME':
+                client.send(nickname.encode('utf-8'))
+            else:
+                print(message)
+        except:
+            # Закрывает соединение при возникновении какой-либо ошибки
+            print("Error!")
+            client.close()
+            break
 
-            username = client_socket.recv(username_length).decode('utf-8')
+# Отправка сообщений серверу
+def sending():
+	while True:
+		message = '{}: {}'.format(nickname, input(''))
+		client.send(message.encode('utf-8'))
 
- 
-            message_header = client_socket.recv(HEADER_LENGTH)
-            message_length = int(message_header.decode('utf-8').strip())
-            message = client_socket.recv(message_length).decode('utf-8')
+# Создаем многопоточность функций recieve() и sending()
+receive_thread = threading.Thread(target=receive)
+receive_thread.start()
 
-            print(f'{username} > {message}')
-
-    except IOError as e:
-        
-        if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
-            print('Reading error: {}'.format(str(e)))
-            sys.exit()
-
-        continue
-
-    except Exception as e:
-        print('Reading error: '.format(str(e)))
-        sys.exit()
+sending_thread = threading.Thread(target=sending)
+sending_thread.start()
