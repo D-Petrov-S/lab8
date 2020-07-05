@@ -54,7 +54,7 @@ def broadcast_notme(message, client):
 def handle(client):
     while True:
         try:
-            # Получем сообщение от пользователя и всем его отправляем
+            # Получем сообщение от пользователя и отправляем его остальным
             message = client.recv(1024)
             broadcast_notme(message, client)
         except:
@@ -90,8 +90,7 @@ def receive():
         nicknames.append(nickname)
         clients.append(client)
 
-        # Представляем нашего пользователся участникам чата. Лично пользователю
-        # сообщаем об удачном подключении к чату.
+        # Представляем нашего пользователя участникам чата. 
         print("Nickname is {}".format(nickname))
         broadcast_all("{} joined!".format(nickname).encode('utf-8'))
 
