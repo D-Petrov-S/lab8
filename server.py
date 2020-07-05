@@ -80,7 +80,7 @@ def receive():
         "Accept a connection. The socket must be bound to an address and listening for connections. The return value is a pair (conn, address) where conn is a new socket object usable to send and receive data on the connection, and address is the address bound to the socket on the other end of the connection." (С) Из документации к модулю socket.
         '''
         client, address = server.accept()
-        # Сообщение выводиться, соответсвенно, только на сервере
+        # Сообщение выводится, соответсвенно, только на сервере
         print("Connected with {}".format(str(address)))
 
         # Запрос на создание никнейма и запись его в список (а также запись
