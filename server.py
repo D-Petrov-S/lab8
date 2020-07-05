@@ -1,116 +1,102 @@
 import socket
-import select
+import threading  # выполнение различных задач одновременно !!!
 
-header_lenght = 10
-IP = '127.0.0.1'
-PORT = 5051
+# Данные для соединения
+host = '127.0.0.1'  # IP адресс для хоста
+port = 16180  # Порт хоста
 
-import socket
-import select
+# Запускаем сервер
+'''
+- Определяем тип сокета
 
-HEADER_LENGTH = 100
+	Параметры:
 
-IP = "127.0.0.1"
-PORT = 1234
+	1. socket.AF_INET - указывает на то, что мы используем интернет сокет (то есть сокет IP), а не UNIX сокет
+		"Сокет UNIX - представляет собой механизм межпроцессного взаимодействия , который позволяет осуществлять обмен данными между двунаправленных процессов , работающих на одной и той же машине."
 
-# Создаем сокет
-# socket.AF_INET - адрес IPv4
-# socket.SOCK_STREAM - TCP
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	2. socket.SOCK_STREAM - указывает на протокол TCP, который мы будем использовать (а не UDP)
 
-# Настройка сокета
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+- Привязываем сокет к хосту и порту (IP, PORT), передавая значения в типе данных tuple
 
-# задаем серверу ip и порт
-server_socket.bind((IP, PORT))
+- Переводим сервер в режим listening - он будет ожидать подключения клиентов
+'''
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind((host, port))
+server.listen()
 
-# Можно обслуживать новые подключения
-server_socket.listen()
-
-# Список всех сокетов
-sockets_list = [server_socket]
-
-# Словарь пользователей, где ключ - сокет, а вот "user header" и имя - данные
-clients = {}
-
-print(f'Listening for connections on {IP}:{PORT}...')
-
-# Получаем сообщения
-def receive_message(client_socket):
-
-    try:
-
-        # Отправляем "header"
-        message_header = client_socket.recv(HEADER_LENGTH)
-
-        # Если нет данных - клиент закрывается
-        if not len(message_header):
-            return False
-
-        # Конвертируем "header" в int
-        message_length = int(message_header.decode('utf-8').strip())
-
-        
-        return {'header': message_header, 'data': client_socket.recv(message_length)}
-
-    except:
-
-        # Потеря соединения
-        return False
-
-while True:
-
-    read_sockets, _, exception_sockets = select.select(sockets_list, [], sockets_list)
+# Создаем пустые списки клиентов, никнеймов, буфферный список клиентов
+clients = []
+nicknames = []
+buffer_clients = []
 
 
-    for notified_socket in read_sockets:
+# Функция, которая просто отправляет сообщения каждому пользователю в списке пользователей
+def broadcast_all(message):
+	for client in clients:
+		client.send(message)
 
-        # Новый сокет
-        if notified_socket == server_socket:
+# Функция, которая отправляет сообщение всем, кроме автора месседжа (если возникает ошибка с данной процедурой - задействуется отправка всем)
+def broadcast_notme(message, client):
+	buffer_clients.clear()
+	buffer_clients.extend(clients)
+	try:
+		buffer_clients.remove(client)
+		for i in buffer_clients:
+			i.send(message)
+	except Exception as e:
+		print(e)
+		broadcast_all(message)
 
-            client_socket, client_address = server_socket.accept()
 
-            # Клиент отправляет свой ник
-            user = receive_message(client_socket)
 
-            # В ином случае - дисконект
-            if user is False:
-                continue
+# Обработка сообщений пользователей.
+def handle(client):
+    while True:
+        try:
+            # Получем сообщение от пользователя и всем его отправляем
+            message = client.recv(1024)
+            broadcast_notme(message, client)
+        except:
+            # Если по какой-то причине возникает ошибка подключения к
+            # пользователю - мы удаляем его из списка клиентов и никнеймов,
+            # выводим сообщение "{его ник} left!", завершаем цикл.
+            index = clients.index(client)
+            clients.remove(client)
+            client.close()  # закрываем сокет
+            nickname = nicknames[index]
+            broadcast_all('{} left!'.format(nickname).encode('utf-8'))
+            nicknames.remove(nickname)
+            break
 
-            # Исключение
-            sockets_list.append(client_socket)
 
-            # Сохраняем ник
-            clients[client_socket] = user
+# Основная функция, в которой задействуется бесконечный цикл. recieve()
+# вызывается при запуске сервера, в ней же вызываются все, созданные выше,
+# функции.
+def receive():
+    while True:
+        '''
+        Соединяем клиента (при таковом подключении)
+        "Accept a connection. The socket must be bound to an address and listening for connections. The return value is a pair (conn, address) where conn is a new socket object usable to send and receive data on the connection, and address is the address bound to the socket on the other end of the connection." (С) Из документации к модулю socket.
+        '''
+        client, address = server.accept()
+        # Сообщение выводиться, соответсвенно, только на сервере
+        print("Connected with {}".format(str(address)))
 
-            print('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'].decode('utf-8')))
+        # Запрос на создание никнейма и запись его в список (а также запись
+        # сокет обьекта "клиент" в список клиентов)
+        client.send('CHECK@NICKNAME'.encode('utf-8'))
+        nickname = client.recv(1024).decode('utf-8')
+        nicknames.append(nickname)
+        clients.append(client)
 
-        # Отправка сообщений
-        else:
+        # Представляем нашего пользователся участникам чата. Лично пользователю
+        # сообщаем об удачном подключении к чату.
+        print("Nickname is {}".format(nickname))
+        broadcast_all("{} joined!".format(nickname).encode('utf-8'))
 
-            message = receive_message(notified_socket)
+        # Многопоточность выполнения функции handle(client)
+        thread = threading.Thread(target=handle, args=(client,))
+        thread.start()
 
-            if message is False:
-                print('Closed connection from: {}'.format(clients[notified_socket]['data'].decode('utf-8')))
-
-                sockets_list.remove(notified_socket)
-
-                del clients[notified_socket]
-
-                continue
-
-            user = clients[notified_socket]
-
-            print(f'Received message from {user["data"].decode("utf-8")}: {message["data"].decode("utf-8")}')
-
-            for client_socket in clients:
-
-                if client_socket != notified_socket:
-
-                    client_socket.send(user['header'] + user['data'] + message['header'] + message['data'])
-
-    for notified_socket in exception_sockets:
-
-        sockets_list.remove(notified_socket)
-
-        del clients[notified_socket]
+receive()
