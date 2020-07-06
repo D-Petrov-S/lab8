@@ -28,35 +28,22 @@ server.listen()
 # Создаем пустые списки клиентов, никнеймов, буфферный список клиентов
 clients = []
 nicknames = []
-buffer_clients = []
 
 
 # Функция, которая просто отправляет сообщения каждому пользователю в списке пользователей
-def broadcast_all(message):
+def broadcast(message):
 	for client in clients:
 		client.send(message)
 
-# Функция, которая отправляет сообщение всем, кроме автора месседжа (если возникает ошибка с данной процедурой - задействуется отправка всем)
-def broadcast_notme(message, client):
-	buffer_clients.clear()
-	buffer_clients.extend(clients)
-	try:
-		buffer_clients.remove(client)
-		for i in buffer_clients:
-			i.send(message)
-	except Exception as e:
-		print(e)
-		broadcast_all(message)
 
 
-
-# Обработка сообщений пользователей.
+# Обработка сообщений пользователей. Обнаружение отсоединения пользователя от сервера.
 def handle(client):
     while True:
         try:
             # Получем сообщение от пользователя и отправляем его остальным
             message = client.recv(1024)
-            broadcast_notme(message, client)
+            broadcast(message)
         except:
             # Если по какой-то причине возникает ошибка подключения к
             # пользователю - мы удаляем его из списка клиентов и никнеймов,
@@ -65,7 +52,7 @@ def handle(client):
             clients.remove(client)
             client.close()  # закрываем сокет
             nickname = nicknames[index]
-            broadcast_all('{} left!'.format(nickname).encode('utf-8'))
+            broadcast('{} left!'.format(nickname).encode('utf-8'))
             nicknames.remove(nickname)
             break
 
@@ -90,9 +77,9 @@ def receive():
         nicknames.append(nickname)
         clients.append(client)
 
-        # Представляем нашего пользователя участникам чата. 
+        # Представляем нашего пользователся участникам чата.
         print("Nickname is {}".format(nickname))
-        broadcast_all("{} joined!".format(nickname).encode('utf-8'))
+        broadcast("{} joined!".format(nickname).encode('utf-8'))
 
         # Многопоточность выполнения функции handle(client)
         thread = threading.Thread(target=handle, args=(client,))
